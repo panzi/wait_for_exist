@@ -24,7 +24,6 @@
 #include <getopt.h>
 
 #include "wait_for_exist.h"
-#include "normpath.h"
 
 static void print_usage(int argc, char *const argv[]) {
     const char *progname = argc > 0 ? argv[0] : "wait_for_exist";
@@ -119,24 +118,14 @@ static int parse_timespec(const char *source, struct timespec *timespec) {
 }
 
 int main(int argc, char* argv[]) {
-#ifdef NORMPATH_MAIN
-    for (size_t index = 1; index < argc; ++ index) {
-        char *path = normpath(argv[index]);
-        if (path == NULL) {
-            fprintf(stderr, "%s: %s\n", argv[index], strerror(errno));
-        }
-        printf("%s -> %s\n", argv[index], path);
-        free(path);
-    }
-#else
     struct timespec timeout = { .tv_sec = 0, .tv_nsec = 0 };
     bool has_timeout = false;
 
     static const struct option long_options[] = {
-        {"timeout", required_argument, 0,  't' },
-        {"help",    no_argument,       0,  'h' },
-        {"version", no_argument,       0,  'v' },
-        {0,         0,                 0,   0  },
+        { "timeout", required_argument, 0,  't' },
+        { "help",    no_argument,       0,  'h' },
+        { "version", no_argument,       0,  'v' },
+        { 0,         0,                 0,   0  },
     };
 
     for (;;) {
@@ -178,9 +167,8 @@ int main(int argc, char* argv[]) {
 
     if (errnum != 0) {
         fprintf(stderr, "%s: %s\n", path, strerror(errnum));
-        return 1;
+        return errnum;
     }
-#endif
 
     return 0;
 }
