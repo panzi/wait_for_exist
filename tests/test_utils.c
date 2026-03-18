@@ -15,7 +15,7 @@ void make_dir(const char *suffix) {
         snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
     test_assertf(res > 0 && res < sizeof(filename), "create directory name");
     test_assertf(mkdir(filename, 0750) == 0 || errno == EEXIST, "error creating directory %s: %s", filename, strerror(errno));
-    fprintf(stderr, "%s: NEW DIR\n", filename);
+    //fprintf(stderr, "%s: NEW DIR\n", filename);
 }
 
 void make_file(const char *suffix) {
@@ -26,7 +26,7 @@ void make_file(const char *suffix) {
     int errnum = errno;
     close(fd);
     test_assertf(fd >= 0, "error creating file %s: %s", filename, strerror(errnum));
-    fprintf(stderr, "%s: NEW FILE\n", filename);
+    //fprintf(stderr, "%s: NEW FILE\n", filename);
 }
 
 void rm(const char *suffix) {
@@ -34,7 +34,7 @@ void rm(const char *suffix) {
     int res = snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
     test_assertf(res > 0 && res < sizeof(filename), "create file name");
     test_assertf(remove(filename) == 0, "error deleting %s: %s", filename, strerror(errno));
-    fprintf(stderr, "%s: DELETED\n", filename);
+    //fprintf(stderr, "%s: DELETED\n", filename);
 }
 
 void _proc_destroy(void *ptr) {

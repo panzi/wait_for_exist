@@ -82,17 +82,17 @@ TEST(path_existing) {
 TEST(parent_exists) {
     make_dir(NULL);
     make_dir("parent_exists");
-    ProcInfo *proc = spawn_wait_for_exist("parent_exists/new.txt");
+    ProcInfo *proc = spawn_wait_for_exist("parent_exists/wanted.txt");
     usleep(1000);
     assert_proc_running(proc);
-    make_file("parent_exists/new.txt");
+    make_file("parent_exists/wanted.txt");
     assert_proc_ok(proc);
 }
 
 TEST(deep_path) {
     make_dir(NULL);
     make_dir("deep_path");
-    ProcInfo *proc = spawn_wait_for_exist("deep_path/foo/bar/baz/new.txt");
+    ProcInfo *proc = spawn_wait_for_exist("deep_path/foo/bar/baz/wanted.txt");
 
     usleep(1000);
     assert_proc_running(proc);
@@ -104,11 +104,53 @@ TEST(deep_path) {
     assert_proc_running(proc);
 
     make_dir("deep_path/foo/bar/baz");
-    make_file("deep_path/foo/bar/baz/new.txt");
+    make_file("deep_path/foo/bar/baz/wanted.txt");
 
     assert_proc_ok(proc);
 }
 
-TODO_TEST(create_and_delete) {
-    // TODO
+TEST(create_and_delete) {
+    make_dir(NULL);
+    make_dir("create_and_delete");
+    ProcInfo *proc = spawn_wait_for_exist("create_and_delete/foo/bar/baz/wanted.txt");
+    assert_proc_running(proc);
+
+    make_dir("create_and_delete/foo");
+    make_dir("create_and_delete/foo/unrelated");
+    make_dir("create_and_delete/foo/bar");
+
+    usleep(1000);
+    assert_proc_running(proc);
+
+    rm("create_and_delete/foo/unrelated");
+    rm("create_and_delete/foo/bar");
+    rm("create_and_delete/foo");
+    rm("create_and_delete");
+
+    assert_proc_running(proc);
+
+    make_dir("create_and_delete");
+    make_dir("create_and_delete/unrelated");
+    make_dir("create_and_delete/foo");
+    make_dir("create_and_delete/foo/unrelated");
+    make_dir("create_and_delete/foo/bar");
+    make_file("create_and_delete/foo/bar/unrelated.txt");
+
+    assert_proc_running(proc);
+
+    rm("create_and_delete/foo/bar/unrelated.txt");
+    make_dir("create_and_delete/foo/bar/baz");
+    rm("create_and_delete/foo/bar/baz");
+
+    assert_proc_running(proc);
+
+    make_dir("create_and_delete/foo/bar/baz");
+    make_file("create_and_delete/foo/bar/baz/unrelated.txt");
+    rm("create_and_delete/foo/bar/baz/unrelated.txt");
+
+    assert_proc_running(proc);
+
+    make_file("create_and_delete/foo/bar/baz/wanted.txt");
+
+    assert_proc_ok(proc);
 }

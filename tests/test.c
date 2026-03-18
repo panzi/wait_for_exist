@@ -32,8 +32,15 @@ void print_str(const char *str) {
     fwrite(str, strlen(str), 1, stdout);
 }
 
-void print_test_header(const Test *test) {
-    printf("%s:%" PRIuPTR ":%s ... ", test->filename, test->lineno, test->func_name);
+void print_test_header(const Test *test, size_t width) {
+    int count = 0;
+    printf("%s:%" PRIuPTR ":%s ...%n", test->filename, test->lineno, test->func_name, &count);
+    ++ count;
+    while (count < width) {
+        putchar('.');
+        count ++;
+    }
+    putchar(' ');
     fflush(stdout);
 }
 
@@ -361,6 +368,25 @@ int test_main(int argc, char *argv[], Test *tests) {
     signal(SIGINT,  handle_sigint);
     signal(SIGTERM, handle_sigterm);
 
+    size_t max_width = 0;
+
+    for (const Test *test = _test_state.tests; test->func_name; ++ test) {
+        size_t width = strlen(test->filename) + strlen(test->func_name) + 7;
+        size_t lineno = test->lineno;
+        if (lineno == 0) {
+            ++ width;
+        } else {
+            while (lineno) {
+                ++ width;
+                lineno /= 10;
+            }
+        }
+
+        if (width > max_width) {
+            max_width = width;
+        }
+    }
+
     for (size_t index = 0; index < test_count; ++ index) {
         if (_test_state.signals & TEST_SIGINT) {
             puts("Stopping on SIGINT!");
@@ -378,7 +404,7 @@ int test_main(int argc, char *argv[], Test *tests) {
         _test_state.current_test = test;
         _test_state.current_result = result;
 
-        print_test_header(test);
+        print_test_header(test, max_width);
 
         if (test->skip) {
             print_colored(use_color, BOLD YELLOW, "SKIP");
