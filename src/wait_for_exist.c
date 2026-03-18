@@ -43,7 +43,7 @@ typedef union {
     struct inotify_event event;
 } EventBuf;
 
-size_t find_parent_sep(const char *path) {
+static size_t find_parent_sep(const char *path) {
     size_t index = strlen(path);
 
     if (index == 0) {
@@ -131,6 +131,10 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
         goto error;
     }
 
+    const char *ptr = event_buf.buffer;
+    const char *endptr = event_buf.buffer;
+    int event_bytes = 0;
+
     for (;;) {
         if (wd >= 0) {
             if (inotify_rm_watch(inotify, wd) != 0) {
@@ -204,26 +208,28 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                 assert(!waiting);
             }
 
-            int count = read(inotify, event_buf.buffer, sizeof(event_buf.buffer));
+            if (ptr >= endptr) {
+                event_bytes = read(inotify, event_buf.buffer, sizeof(event_buf.buffer));
 
-            if (count == 0) {
-                // shouldn't happen!
-                status = EPIPE;
-                DEBUGF("inotify_read_event(%d, %p): end of file", inotify, event_buf.buffer);
-                goto error;
+                if (event_bytes == 0) {
+                    // shouldn't happen!
+                    status = EPIPE;
+                    DEBUGF("read(%d, %p, %" PRIuPTR "): end of file", inotify, event_buf.buffer, sizeof(event_buf.buffer));
+                    goto error;
+                }
+
+                if (event_bytes < 0) {
+                    status = errno;
+                    DEBUGF("read(%d, %p, %" PRIuPTR "): %s", inotify, event_buf.buffer, sizeof(event_buf.buffer), strerror(status));
+                    goto error;
+                }
+
+                endptr = event_buf.buffer + event_bytes;
             }
 
-            if (count < 0) {
-                status = errno;
-                DEBUGF("inotify_read_event(%d, %p): %s", inotify, event_buf.buffer, strerror(status));
-                goto error;
-            }
-
-            const char *endptr = event_buf.buffer + count;
-            struct inotify_event *event = &event_buf.event;
-            for (const char *ptr = event_buf.buffer; ptr < endptr; ptr += sizeof(struct inotify_event) + event->len) {
-                // XXX: may loose events!
-                event = (struct inotify_event*)ptr;
+            while (ptr < endptr) {
+                struct inotify_event *event = (struct inotify_event*)ptr;
+                ptr += sizeof(struct inotify_event) + event->len;
 
                 if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
                     goto child;
@@ -233,7 +239,6 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                     goto parent;
                 }
             }
-
         }
 
         assert(false); // should not be reachable
