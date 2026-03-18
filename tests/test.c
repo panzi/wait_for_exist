@@ -4,13 +4,11 @@
 #include <stdlib.h>
 #include <setjmp.h>
 #include <stdbool.h>
-#include <stdarg.h>
 #include <errno.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <string.h>
 #include <inttypes.h>
-#include <spawn.h>
 #include <time.h>
 #include <pthread.h>
 #include <signal.h>
@@ -20,126 +18,7 @@
 #include <sys/wait.h>
 #include <sys/epoll.h>
 
-typedef struct Test {
-    const char *func_name;
-    const char *filename;
-    size_t lineno;
-    bool skip;
-    void (*test_func)();
-} Test;
-
-
-#define _test_str2(X) #X
-#define _test_str(X) _test_str2(X)
-
-#define _test_cat2(A, B) A##B
-#define _test_cat(A, B) _test_cat2(A, B)
-
-#define _TEST(NAME, SKIP)                                    \
-    static void _test_cat(test_func_, NAME)();               \
-    const Test _test_cat(test_case_, NAME) = {               \
-        .func_name = _test_str(NAME),                        \
-        .filename = __FILE__,                                \
-        .lineno = __LINE__,                                  \
-        .skip = SKIP,                                        \
-        .test_func = _test_cat(test_func_, NAME),            \
-    };                                                       \
-    void _test_cat(test_func_, NAME)()
-
-#define TEST(NAME) _TEST(NAME, false)
-#define TODO_TEST(NAME) _TEST(NAME, true)
-
-typedef struct StrBuf {
-    char *data;
-    size_t capacity;
-    size_t used;
-} StrBuf;
-
-int strbuf_append(StrBuf *buf, const char *data, size_t size) {
-    if (size + 1 > buf->capacity || buf->used > buf->capacity - size - 1) {
-        size_t new_capacity = buf->capacity == 0 ? 4096 : buf->capacity * 2;
-        if (new_capacity < buf->capacity) {
-            errno = ENOMEM;
-            return -1;
-        }
-        char *new_data = realloc(buf->data, new_capacity);
-        if (new_data == NULL) {
-            return -1;
-        }
-
-        buf->data = new_data;
-        buf->capacity = new_capacity;
-    }
-
-    memcpy(buf->data + buf->used, data, size);
-    buf->used += size;
-    buf->data[buf->used] = 0;
-
-    return 0;
-}
-
-int strbuf_append_str(StrBuf *buf, const char *data) {
-    return strbuf_append(buf, data, strlen(data));
-}
-
-void strbuf_destroy(StrBuf *buf) {
-    free(buf->data);
-    buf->data = NULL;
-    buf->used = 0,
-    buf->capacity = 0;
-}
-
-typedef struct TestResult {
-    bool ok;
-    size_t assert_count;
-    const char *assert_filename;
-    const char *assert_func_name;
-    size_t assert_lineno;
-    const char *assert_expr;
-    char *assert_message;
-    StrBuf test_stdout;
-    StrBuf test_stderr;
-} TestResult;
-
-typedef struct TestState {
-    jmp_buf env;
-
-    const Test *tests;
-    TestResult *results;
-
-    const Test *current_test;
-    TestResult *current_result;
-
-    int original_stdout;
-    int original_stderr;
-} TestState;
-
-TestState _test_state;
-
-#define test_assertf(EXPR, FMT, ...)                                        \
-    {                                                                       \
-        ++ _test_state.current_result->assert_count;                        \
-                                                                            \
-        if (!(EXPR)) {                                                      \
-            _test_state.current_result->ok = false;                         \
-            _test_state.current_result->assert_filename = __FILE__;         \
-            _test_state.current_result->assert_func_name = __FUNCTION__;    \
-            _test_state.current_result->assert_lineno = __LINE__;           \
-            _test_state.current_result->assert_expr = _test_str(EXPR);      \
-            _test_state.current_result->assert_message = NULL;              \
-                                                                            \
-            const char *_test_fmt = FMT;                                    \
-            if (_test_fmt != NULL && strlen(_test_fmt) > 0) {               \
-                if (asprintf(&_test_state.current_result->assert_message,   \
-                    FMT __VA_OPT__(,) __VA_ARGS__) < 0) {                   \
-                    _test_state.current_result->assert_message = strdup(strerror(errno)); \
-                }                                                           \
-            }                                                               \
-            longjmp(_test_state.env, -1);                                   \
-        }                                                                   \
-    }
-
-#define test_assert(EXPR) test_assertf(EXPR, NULL)
+#include "test.h"
 
 #define CLEAR "\x1B[0m"
 #define BOLD "\x1B[1m"
@@ -337,17 +216,30 @@ void *capture_thread_func(void *ptr) {
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
+TestState _test_state = {
+    .tests = NULL,
+    .results = NULL,
+    .current_test = NULL,
+    .current_result = NULL,
+    .original_stdout = STDOUT_FILENO,
+    .original_stderr = STDERR_FILENO,
+};
+
+
+int test_main(int argc, char *argv[], Test *tests) {
     bool fail = false;
     bool use_color = isatty(STDOUT_FILENO) != 0;
 
+    const char *filter_test = NULL;
+
     static const struct option long_options[] = {
         { "color",   required_argument,  0,  'c' },
+        { "test",    required_argument,  0,  't' },
         { 0,         0,                  0,   0  },
     };
 
     for (;;) {
-        int opt = getopt_long(argc, argv, "c:", long_options, NULL);
+        int opt = getopt_long(argc, argv, "c:t:", long_options, NULL);
 
         if (opt == -1)
             break;
@@ -366,14 +258,23 @@ int main(int argc, char *argv[]) {
                 }
                 break;
 
+            case 't':
+                filter_test = optarg;
+                break;
+
             case '?':
                 return 1;
         }
     }
 
+    _test_state.tests = tests;
+
     size_t test_count = 0;
-    for (const Test *ptr = _test_state.tests; ptr->func_name; ++ ptr) {
+    for (Test *ptr = _test_state.tests; ptr->func_name; ++ ptr) {
         ++ test_count;
+        if (filter_test && strcasestr(ptr->func_name, filter_test) == NULL) {
+            ptr->skip = true;
+        }
     }
 
     _test_state.results = calloc(test_count, sizeof(TestResult));
@@ -542,168 +443,3 @@ cleanup:
 
     return fail ? 1 : 0;
 }
-
-void make_dir(const char *suffix) {
-    char filename[4096];
-    int res = suffix == NULL ?
-        snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d", getpid()) :
-        snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create directory name");
-    test_assertf(mkdir(filename, 0750) == 0 || errno == EEXIST, "error creating directory %s: %s", filename, strerror(errno));
-}
-
-void make_file(const char *suffix) {
-    make_dir(NULL);
-
-    char filename[4096];
-    int res = snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create file name");
-    int fd = open(filename, O_CREAT | O_WRONLY | O_CLOEXEC, 0640);
-    test_assertf(fd >= 0, "error creating file %s: %s", filename, strerror(errno));
-    close(fd);
-}
-
-void rm(const char *suffix) {
-    char filename[4096];
-    int res = snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create file name");
-    test_assertf(remove(filename) == 0, "error deleting %s: %s", filename, strerror(errno));
-}
-
-typedef struct ProcInfo {
-    char *filename;
-    struct timespec started_at;
-    pid_t pid;
-} ProcInfo;
-
-#ifndef BINARY_PATH
-#define BINARY_PATH "./build/debug/wait_for_exist"
-#endif
-
-ProcInfo spawn_wait_for_exist(const char *suffix) {
-    char buf[4096];
-    pid_t pid = -1;
-
-    int res = snprintf(buf, sizeof(buf), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(buf), "create file name");
-    char *filename = strdup(buf);
-    test_assert(filename != NULL);
-
-    char *binary_path = canonicalize_file_name(BINARY_PATH);
-    test_assertf(binary_path != NULL, "error canonicalizing path %s: %s", BINARY_PATH, strerror(errno));
-
-    const char*const args[] = {
-        BINARY_PATH,
-        filename,
-        NULL,
-    };
-
-    struct timespec started_at = { .tv_sec = 0, .tv_nsec = 0 };
-    clock_gettime(CLOCK_MONOTONIC, &started_at);
-
-    res = posix_spawn(&pid, binary_path, NULL, NULL, (char *const*)args, NULL);
-
-    free(binary_path);
-    binary_path = NULL;
-
-    test_assertf(
-        res == 0,
-        "error spawning process: %s %s: %s", BINARY_PATH, filename, strerror(errno)
-    );
-
-    return (ProcInfo){
-        .filename = filename,
-        .started_at = started_at,
-        .pid = pid,
-    };
-}
-
-struct timespec timespec_sub(const struct timespec *lhs, const struct timespec *rhs) {
-    struct timespec res;
-    if (lhs->tv_nsec < rhs->tv_nsec) {
-        res.tv_sec = lhs->tv_sec - rhs->tv_sec - 1;
-        res.tv_nsec = lhs->tv_nsec - rhs->tv_nsec + 1000000000;
-    } else {
-        res.tv_sec = lhs->tv_sec - rhs->tv_sec;
-        res.tv_nsec = lhs->tv_nsec - rhs->tv_nsec;
-    }
-    return res;
-}
-
-#define TIMEOUT 5
-
-#define assert_proc_ok(PROC) { \
-    alarm(TIMEOUT); /* HACK: using alarm() for timeout */ \
-    int _test_status = 0; \
-    int _test_wait_res = waitpid((PROC)->pid, &_test_status, 0); \
-    \
-    struct timespec _test_ended_at = { .tv_sec = 0, .tv_nsec = 0 }; \
-    clock_gettime(CLOCK_MONOTONIC, &_test_ended_at); \
-    \
-    if (_test_wait_res == -1) { \
-        int errnum = errno; \
-        if (errnum == EINTR && timespec_sub(&_test_ended_at, &(PROC)->started_at).tv_sec >= TIMEOUT) { \
-            test_assertf(false, "timeout running %s %s", BINARY_PATH, (PROC)->filename); \
-        } else { \
-            test_assertf(_test_wait_res >= 0, "error wating for %s %s: %s", BINARY_PATH, (PROC)->filename, strerror(errnum)); \
-        } \
-    } else if (WIFSIGNALED(_test_status)) { \
-        test_assertf(false, "process %s %s terminated by signal %d", BINARY_PATH, (PROC)->filename, WTERMSIG(_test_status)); \
-    } else if (WIFSTOPPED(_test_status)) { \
-        test_assertf(false, "process %s %s stopped by signal %d", BINARY_PATH, (PROC)->filename, WSTOPSIG(_test_status)); \
-    } else if (WIFEXITED(_test_status)) { \
-        int _test_exit_status = WEXITSTATUS(_test_status); \
-        test_assertf(_test_exit_status == 0, "process %s %s exit status: %d", BINARY_PATH, (PROC)->filename, _test_exit_status); \
-    } else { \
-        test_assertf(_test_status == 0, "process %s %s status: %d", BINARY_PATH, (PROC)->filename, _test_status); \
-    } \
-    free((PROC)->filename); \
-    (PROC)->filename = NULL; \
-    sleep(0); /* HACK: clear alarm */ \
-}
-
-#define assert_proc_running(PROC) { \
-    int _test_proc_status = 0; \
-    test_assertf(waitpid((PROC)->pid, &_test_proc_status, WNOHANG) == 0, "process isn't running %s %s", BINARY_PATH, (PROC)->filename); \
-}
-
-TEST(existing) {
-    make_dir(NULL);
-    make_dir("existing");
-    make_file("existing/exsiting.txt");
-    ProcInfo proc = spawn_wait_for_exist("existing/exsiting.txt");
-    assert_proc_ok(&proc);
-}
-
-TEST(parent_exists) {
-    make_dir(NULL);
-    make_dir("parent_exists");
-    ProcInfo proc = spawn_wait_for_exist("parent_exists/new.txt");
-    usleep(1000);
-    assert_proc_running(&proc);
-    make_file("parent_exists/new.txt");
-    assert_proc_ok(&proc);
-}
-
-TODO_TEST(long_path) {
-    // TODO
-}
-
-TODO_TEST(complex) {
-    // TODO
-}
-
-TestState _test_state = {
-    .tests = (Test[]){
-        test_case_existing,
-        test_case_parent_exists,
-        test_case_long_path,
-        test_case_complex,
-        { NULL, NULL },
-    },
-    .results = NULL,
-    .current_test = NULL,
-    .current_result = NULL,
-    .original_stdout = STDOUT_FILENO,
-    .original_stderr = STDERR_FILENO,
-};

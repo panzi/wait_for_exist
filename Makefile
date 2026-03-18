@@ -13,7 +13,11 @@ endif
 OBJ = build/$(BUILD_TYPE)/main.o build/$(BUILD_TYPE)/normpath.o build/$(BUILD_TYPE)/wait_for_exist.o
 BIN = build/$(BUILD_TYPE)/wait_for_exist
 
-TEST_OBJ = build/$(BUILD_TYPE)/tests/test_main.o
+TEST_OBJ = build/$(BUILD_TYPE)/tests/main.o \
+           build/$(BUILD_TYPE)/tests/test.o \
+           build/$(BUILD_TYPE)/tests/test_utils.o \
+           build/$(BUILD_TYPE)/tests/tests.o \
+           build/$(BUILD_TYPE)/tests/strbuf.o
 TEST_BIN = build/$(BUILD_TYPE)/tests/test
 
 .PHONY: all clean test
