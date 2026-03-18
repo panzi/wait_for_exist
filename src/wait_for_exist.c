@@ -38,34 +38,10 @@
 #define DEBUGF(FMT, ...) fprintf(stderr, "%s:%d:%s: " FMT "\n", __FILE__, __LINE__, __FUNCTION__ __VA_OPT__(,) __VA_ARGS__);
 #endif
 
-static int inotify_read_event(int inotify, struct inotify_event *event) {
-    void *ptr = event;
-    size_t read_size = sizeof(struct inotify_event);
-    size_t count = 0;
-
-    while (read_size > 0) {
-        ssize_t new_count = read(inotify, ptr, read_size);
-
-        if (new_count == 0) {
-            return 0;
-        }
-
-        if (new_count < 0) {
-            DEBUGF("read(%d, 0x%" PRIxPTR ", %" PRIuPTR "): %s", inotify, (uintptr_t)ptr, read_size, strerror(errno));
-            return -1;
-        }
-
-        count += new_count;
-        if (count == sizeof(struct inotify_event)) {
-            break;
-        }
-
-        read_size -= new_count;
-        ptr += new_count;
-    }
-
-    return 1;
-}
+typedef union {
+    char buffer[4096];
+    struct inotify_event event;
+} EventBuf;
 
 size_t find_parent_sep(const char *path) {
     size_t index = strlen(path);
@@ -108,12 +84,12 @@ size_t find_parent_sep(const char *path) {
 
 int wait_for_exist(const char *path, const struct timespec *timeout) {
     if (path == NULL) {
-        DEBUGF("path may not be NULL");
+        DEBUGF("path may not be NULL!");
         return EINVAL;
     }
 
+    EventBuf event_buf;
     struct epoll_event events[MAX_EVENTS];
-    struct inotify_event ievent;
 
     char *path_buf = normpath(path);
 
@@ -130,34 +106,28 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
 
     const size_t path_len = strlen(path_buf);
 
-    if (timeout == NULL) {
-        inotify = inotify_init1(IN_CLOEXEC);
-    } else {
-        inotify = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-
-        if (inotify >= 0) {
-            epoll = epoll_create1(EPOLL_CLOEXEC);
-
-            if (epoll < 0) {
-                status = errno;
-                DEBUGF("epoll_create1(EPOLL_CLOEXEC): %s", strerror(status));
-                goto error;
-            }
-
-            if (epoll_ctl(epoll, EPOLL_CTL_ADD, inotify, &(struct epoll_event){
-                .events = EPOLLIN,
-                .data.fd = inotify,
-            }) != 0) {
-                status = errno;
-                DEBUGF("epoll_ctl(epoll, EPOLL_CTL_ADD, inotify, &event): %s", strerror(status));
-                goto error;
-            }
-        }
-    }
+    inotify = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
 
     if (inotify < 0) {
         status = errno;
-        DEBUGF("inotify_init1(IN_CLOEXEC): %s", strerror(status));
+        DEBUGF("inotify_init1(IN_CLOEXEC | IN_NONBLOCK): %s", strerror(status));
+        goto error;
+    }
+
+    epoll = epoll_create1(EPOLL_CLOEXEC);
+
+    if (epoll < 0) {
+        status = errno;
+        DEBUGF("epoll_create1(EPOLL_CLOEXEC): %s", strerror(status));
+        goto error;
+    }
+
+    if (epoll_ctl(epoll, EPOLL_CTL_ADD, inotify, &(struct epoll_event){
+        .events = EPOLLIN,
+        .data.fd = inotify,
+    }) != 0) {
+        status = errno;
+        DEBUGF("epoll_ctl(%d, EPOLL_CTL_ADD, %d, &event): %s", epoll, inotify, strerror(status));
         goto error;
     }
 
@@ -186,7 +156,7 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                 goto parent;
             } else {
                 status = errnum;
-                DEBUGF("inotify_add_watch(inotify, path_buf, IN_CREATE | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF): %s", strerror(status));
+                DEBUGF("inotify_add_watch(%d, \"%s\", IN_CREATE | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF): %s", inotify, path_buf, strerror(status));
                 goto error;
             }
         }
@@ -197,7 +167,7 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
             int errnum = errno;
             if (errnum != ENOENT) {
                 status = errnum;
-                DEBUGF("access(path_buf, F_OK): %s", strerror(status));
+                DEBUGF("access(\"%s\", F_OK): %s", path_buf, strerror(status));
                 goto error;
             }
         } else {
@@ -207,56 +177,63 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
         path_buf[sep_index] = 0;
 
         for (;;) {
-            if (epoll != -1) {
-                bool fired = false;
+            bool waiting = true;
 
-                while (!fired) {
-                    int event_count = epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL);
-                    if (event_count < 0) {
-                        status = errno;
-                        DEBUGF("epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL): %s", strerror(status));
-                        goto error;
+            while (waiting) {
+                int event_count = epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL);
+                if (event_count < 0) {
+                    status = errno;
+                    DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
+                    goto error;
+                }
+
+                if (event_count == 0) {
+                    status = ETIMEDOUT;
+                    DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
+                    goto error;
+                }
+
+                for (int index = 0; index < event_count; ++ index) {
+                    struct epoll_event *event = &events[index];
+                    if (event->events & EPOLLIN && event->data.fd == inotify) {
+                        waiting = false;
+                        break;
                     }
+                }
 
-                    if (event_count == 0) {
-                        status = ETIMEDOUT;
-                        DEBUGF("epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL): %s", strerror(status));
-                        goto error;
-                    }
+                assert(!waiting);
+            }
 
-                    for (int index = 0; index < event_count; ++ index) {
-                        struct epoll_event *ev = &events[index];
-                        if (ev->events & EPOLLIN && ev->data.fd == inotify) {
-                            fired = true;
-                            break;
-                        }
-                    }
+            int count = read(inotify, event_buf.buffer, sizeof(event_buf.buffer));
 
-                    assert(fired);
+            if (count == 0) {
+                // shouldn't happen!
+                status = EPIPE;
+                DEBUGF("inotify_read_event(%d, %p): end of file", inotify, event_buf.buffer);
+                goto error;
+            }
+
+            if (count < 0) {
+                status = errno;
+                DEBUGF("inotify_read_event(%d, %p): %s", inotify, event_buf.buffer, strerror(status));
+                goto error;
+            }
+
+            const char *endptr = event_buf.buffer + count;
+            struct inotify_event *event = &event_buf.event;
+            for (const char *ptr = event_buf.buffer; ptr < endptr; ptr += sizeof(struct inotify_event) + event->len) {
+                // XXX: may loose events!
+                event = (struct inotify_event*)ptr;
+
+                if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+                    goto child;
+                }
+
+                if (event->mask & (IN_DELETE_SELF | IN_MOVE_SELF)) {
+                    goto parent;
                 }
             }
 
-            int res = inotify_read_event(inotify, &ievent);
-            if (res < 0) {
-                status = errno;
-                DEBUGF("inotify_read_event(inotify, &ievent): %s", strerror(status));
-                goto error;
-            }
-
-            if (res == 0) {
-                // shouldn't happen!
-                status = EOF;
-                DEBUGF("inotify_read_event(inotify, &ievent): end of file");
-                goto error;
-            }
-
-            if (ievent.mask & (IN_CREATE | IN_MOVED_TO)) {
-                goto child;
-            }
-
-            if (ievent.mask & (IN_DELETE_SELF | IN_MOVE_SELF)) {
-                goto parent;
-            }
         }
 
         assert(false); // should not be reachable
