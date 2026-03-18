@@ -3,6 +3,26 @@
 #include "tests.h"
 #include "test_utils.h"
 
+#include "normpath.h"
+
+// TODO: free() on fail
+#define assert_normpath(path, expected) \
+{ \
+    const char *_test_path = (path); \
+    const char *_test_expected = (expected); \
+    char *_test_path_res = normpath(_test_path); \
+    test_assertf(_test_path_res != NULL, "normpath(\"%s\") failed: %s", _test_path, strerror(errno)); \
+    test_assertf(strcmp(_test_path_res, _test_expected) == 0, "expected: \"%s\", actual: \"%s\"", _test_expected, _test_path_res); \
+    free(_test_path_res); \
+}
+
+TODO_TEST(normpath_simple) {}
+TODO_TEST(normpath_double_slash) {}
+TODO_TEST(normpath_trailing_slash) {}
+TODO_TEST(normpath_dot) {}
+TODO_TEST(normpath_double_dot) {}
+TODO_TEST(normpath_everything) {}
+
 TEST(path_existing) {
     make_dir(NULL);
     make_dir("path_existing");

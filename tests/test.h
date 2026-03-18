@@ -33,6 +33,7 @@ extern "C" {
 #define TEST(NAME) _TEST(NAME, false)
 #define TODO_TEST(NAME) _TEST(NAME, true)
 #define DECL_TEST(NAME) extern Test _test_cat(test_case_, NAME);
+#define GET_TEST(NAME) _test_cat(test_case_, NAME)
 
 #define test_assertf(EXPR, FMT, ...)                                        \
     {                                                                       \
