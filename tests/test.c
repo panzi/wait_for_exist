@@ -189,6 +189,7 @@ void *capture_thread_func(void *ptr) {
 
         for (int index = 0; index < event_count; ++ index) {
             const struct epoll_event *event = &events[index];
+
             //const char *what = event->data.fd == data->stdout_fd ? "stdout" : "stderr";
             if (event->events & EPOLLIN) {
                 //fprintf(orig_stderr, "capture_thread_func %s POLLIN\n", what);
@@ -260,6 +261,18 @@ void test_cleanup(void (*cleanup_func)(void *data), void *data) {
         .cleanup_func = cleanup_func,
         .data = data,
     };
+}
+
+void handle_sigalarm(int signum) {
+    _test_state.signals |= TEST_SIGALRM;
+}
+
+void handle_sigterm(int signum) {
+    _test_state.signals |= TEST_SIGTERM;
+}
+
+void handle_sigint(int signum) {
+    _test_state.signals |= TEST_SIGINT;
 }
 
 int test_main(int argc, char *argv[], Test *tests) {
@@ -344,9 +357,21 @@ int test_main(int argc, char *argv[], Test *tests) {
     _test_state.original_stdout = original_stdout;
     _test_state.original_stderr = original_stderr;
 
-    signal(SIGALRM, SIG_IGN);
+    signal(SIGALRM, handle_sigalarm);
+    signal(SIGINT,  handle_sigint);
+    signal(SIGTERM, handle_sigterm);
 
     for (size_t index = 0; index < test_count; ++ index) {
+        if (_test_state.signals & TEST_SIGINT) {
+            puts("Stopping on SIGINT!");
+            break;
+        }
+
+        if (_test_state.signals & TEST_SIGTERM) {
+            puts("Stopping on SIGTERM!");
+            break;
+        }
+
         const Test *test = &_test_state.tests[index];
         TestResult *result = &_test_state.results[index];
 
@@ -364,6 +389,12 @@ int test_main(int argc, char *argv[], Test *tests) {
 
             HANDLE_ERROR(dup2(capture_stdout_pipe[1], STDOUT_FILENO));
             HANDLE_ERROR(dup2(capture_stderr_pipe[1], STDERR_FILENO));
+
+            close(capture_stdout_pipe[1]);
+            close(capture_stderr_pipe[1]);
+
+            capture_stdout_pipe[1] = -1;
+            capture_stderr_pipe[1] = -1;
 
             CaptureThreadData capture_thread_data = {
                 .stdout_fd = capture_stdout_pipe[0],
@@ -388,13 +419,15 @@ int test_main(int argc, char *argv[], Test *tests) {
                 test->test_func();
             }
 
-            close(capture_stdout_pipe[1]);
-            close(capture_stderr_pipe[1]);
+            for (size_t index = 0; index < _test_state.cleanup_used; ++ index) {
+                const TestCleanup *cleanup = &_test_state.cleanup[index];
+                cleanup->cleanup_func(cleanup->data);
+            }
+
+            _test_state.cleanup_used = 0;
+
             close(STDOUT_FILENO);
             close(STDERR_FILENO);
-
-            capture_stdout_pipe[1] = -1;
-            capture_stderr_pipe[1] = -1;
 
             int join_res = pthread_join(thread, NULL);
             errnum = errno;
@@ -405,24 +438,20 @@ int test_main(int argc, char *argv[], Test *tests) {
             capture_stdout_pipe[0] = -1;
             capture_stderr_pipe[0] = -1;
 
-            HANDLE_ERROR(dup2(original_stderr, STDERR_FILENO));
-            HANDLE_ERROR(dup2(original_stdout, STDOUT_FILENO));
+            dup2(original_stderr, STDERR_FILENO);
+            dup2(original_stdout, STDOUT_FILENO);
 
             if (join_res != 0) {
                 fprintf(
                     stderr,
-                    "pthread_join(thread, NULL): %s\n",
+                    "%s:%s: pthread_join(thread, NULL): %s\n",
+                    test->filename,
+                    test->func_name,
                     strerror(errnum)
                 );
                 fail = true;
                 goto cleanup;
             }
-
-            for (size_t index = 0; index < _test_state.cleanup_used; ++ index) {
-                const TestCleanup *cleanup = &_test_state.cleanup[index];
-                cleanup->cleanup_func(cleanup->data);
-            }
-            _test_state.cleanup_used = 0;
 
             if (result->ok && result->assert_count == 0) {
                 result->ok = false;

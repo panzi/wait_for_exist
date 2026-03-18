@@ -75,26 +75,40 @@ TEST(path_existing) {
     make_dir(NULL);
     make_dir("path_existing");
     make_file("path_existing/exsiting.txt");
-    ProcInfo proc = spawn_wait_for_exist("path_existing/exsiting.txt");
-    assert_proc_ok(&proc);
+    ProcInfo *proc = spawn_wait_for_exist("path_existing/exsiting.txt");
+    assert_proc_ok(proc);
 }
 
 TEST(parent_exists) {
     make_dir(NULL);
     make_dir("parent_exists");
-    ProcInfo proc = spawn_wait_for_exist("parent_exists/new.txt");
+    ProcInfo *proc = spawn_wait_for_exist("parent_exists/new.txt");
     usleep(1000);
-    assert_proc_running(&proc);
+    assert_proc_running(proc);
     make_file("parent_exists/new.txt");
-    assert_proc_ok(&proc);
+    assert_proc_ok(proc);
 }
 
-TODO_TEST(long_path) {
+TEST(deep_path) {
     make_dir(NULL);
-    make_dir("long_path");
-    // TODO
+    make_dir("deep_path");
+    ProcInfo *proc = spawn_wait_for_exist("deep_path/foo/bar/baz/new.txt");
+
+    usleep(1000);
+    assert_proc_running(proc);
+
+    make_dir("deep_path/foo");
+    make_dir("deep_path/foo/bar");
+    usleep(2000);
+
+    assert_proc_running(proc);
+
+    make_dir("deep_path/foo/bar/baz");
+    make_file("deep_path/foo/bar/baz/new.txt");
+
+    assert_proc_ok(proc);
 }
 
-TODO_TEST(complex) {
+TODO_TEST(create_and_delete) {
     // TODO
 }

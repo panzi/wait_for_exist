@@ -57,7 +57,7 @@ extern "C" {
 #define test_fail(FMT, ...)                                             \
     {                                                                   \
         ++ _test_state.current_result->assert_count;                    \
-        _test_fail(NULL, FMT __VA_OPT__(,), __VA_ARGS__);               \
+        _test_fail(NULL, FMT __VA_OPT__(,) __VA_ARGS__);                \
     }
 
 #define test_assertf(EXPR, FMT, ...)                                    \
@@ -96,6 +96,12 @@ typedef struct TestResult {
     StrBuf test_stderr;
 } TestResult;
 
+enum {
+    TEST_SIGINT  = 1,
+    TEST_SIGTERM = 2,
+    TEST_SIGALRM = 4,
+};
+
 typedef struct TestState {
     jmp_buf env;
 
@@ -111,6 +117,8 @@ typedef struct TestState {
     TestCleanup *cleanup;
     size_t cleanup_capacity;
     size_t cleanup_used;
+
+    unsigned int signals;
 } TestState;
 
 /** Not thread safe! Add lock? */

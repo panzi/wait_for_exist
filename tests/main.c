@@ -23,7 +23,7 @@ char *which(const char *command) {
     }
 
     if (*command == '/') {
-        if (access(command, R_OK | X_OK) != F_OK) {
+        if (access(command, R_OK | X_OK) != 0) {
             return NULL;
         }
         return strdup(command);
@@ -32,7 +32,7 @@ char *which(const char *command) {
     if (strchr(command, '/') != NULL) {
         char *command_path = normpath(command);
         if (command_path != NULL) {
-            if (access(command_path, R_OK | X_OK) != F_OK) {
+            if (access(command_path, R_OK | X_OK) != 0) {
                 free(command_path);
                 return NULL;
             }
@@ -81,10 +81,12 @@ char *which(const char *command) {
             return NULL;
         }
 
-        if (access(command_path, R_OK | X_OK) == F_OK) {
+        if (access(command_path, R_OK | X_OK) == 0) {
             free(buf);
             return command_path;
         }
+
+        free(command_path);
 
         if (!nextptr) break;
         ptr = nextptr + 1;
@@ -127,8 +129,8 @@ int main(int argc, char *argv[]) {
         GET_TEST(normpath_everything),
         GET_TEST(path_existing),
         GET_TEST(parent_exists),
-        GET_TEST(long_path),
-        GET_TEST(complex),
+        GET_TEST(deep_path),
+        GET_TEST(create_and_delete),
         { NULL, NULL },
     });
 

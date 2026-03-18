@@ -133,7 +133,7 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
 
     const char *ptr = event_buf.buffer;
     const char *endptr = event_buf.buffer;
-    int event_bytes = 0;
+    ssize_t event_bytes = 0;
 
     for (;;) {
         if (wd >= 0) {
@@ -175,40 +175,45 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                 goto error;
             }
         } else {
+            sep_index = strlen(path_buf);
+            if (sep_index == path_len) {
+                // success
+                goto cleanup;
+            }
             goto child;
         }
 
         path_buf[sep_index] = 0;
 
         for (;;) {
-            bool waiting = true;
-
-            while (waiting) {
-                int event_count = epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL);
-                if (event_count < 0) {
-                    status = errno;
-                    DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
-                    goto error;
-                }
-
-                if (event_count == 0) {
-                    status = ETIMEDOUT;
-                    DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
-                    goto error;
-                }
-
-                for (int index = 0; index < event_count; ++ index) {
-                    struct epoll_event *event = &events[index];
-                    if (event->events & EPOLLIN && event->data.fd == inotify) {
-                        waiting = false;
-                        break;
-                    }
-                }
-
-                assert(!waiting);
-            }
-
             if (ptr >= endptr) {
+                bool waiting = true;
+
+                while (waiting) {
+                    int event_count = epoll_pwait2(epoll, events, MAX_EVENTS, timeout, NULL);
+                    if (event_count < 0) {
+                        status = errno;
+                        DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
+                        goto error;
+                    }
+
+                    if (event_count == 0) {
+                        status = ETIMEDOUT;
+                        DEBUGF("epoll_pwait2(%d, events, MAX_EVENTS, timeout, NULL): %s", epoll, strerror(status));
+                        goto error;
+                    }
+
+                    for (int index = 0; index < event_count; ++ index) {
+                        struct epoll_event *event = &events[index];
+                        if (event->events & EPOLLIN && event->data.fd == inotify) {
+                            waiting = false;
+                            break;
+                        }
+                    }
+
+                    assert(!waiting);
+                }
+
                 event_bytes = read(inotify, event_buf.buffer, sizeof(event_buf.buffer));
 
                 if (event_bytes == 0) {
@@ -224,7 +229,8 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                     goto error;
                 }
 
-                endptr = event_buf.buffer + event_bytes;
+                ptr = event_buf.buffer;
+                endptr = ptr + event_bytes;
             }
 
             while (ptr < endptr) {
@@ -232,7 +238,18 @@ int wait_for_exist(const char *path, const struct timespec *timeout) {
                 ptr += sizeof(struct inotify_event) + event->len;
 
                 if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
-                    goto child;
+                    const char *filename = path_buf + sep_index + 1;
+
+                    if (strcmp(event->name, filename) == 0) {
+                        path_buf[sep_index] = '/';
+                        sep_index = strlen(path_buf);
+                        if (sep_index == path_len) {
+                            // success
+                            goto cleanup;
+                        }
+
+                        goto child;
+                    }
                 }
 
                 if (event->mask & (IN_DELETE_SELF | IN_MOVE_SELF)) {

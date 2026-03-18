@@ -19,8 +19,8 @@ DECL_TEST(normpath_everything);
 
 DECL_TEST(path_existing);
 DECL_TEST(parent_exists);
-DECL_TEST(long_path);
-DECL_TEST(complex);
+DECL_TEST(deep_path);
+DECL_TEST(create_and_delete);
 
 #ifdef __cplusplus
 }
