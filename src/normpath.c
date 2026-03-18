@@ -141,11 +141,5 @@ char *normpath(const char *path) {
     assert(actual_capacity > 0);
     char *shrunk = realloc(buf, actual_capacity);
 
-    // GCC thinks `buf` is used after free here, but `buf` is only returned if
-    // there was an error in `realloc()`. This is error handling, not an error!
-    // clang shows no warnings.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuse-after-free"
     return actual_capacity == 0 || shrunk != NULL ? shrunk : buf;
-#pragma GCC diagnostic pop
 }
