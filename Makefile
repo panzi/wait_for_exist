@@ -43,7 +43,7 @@ build/$(BUILD_TYPE)/%.o: src/%.c src/normpath.h src/wait_for_exist.h
 	$(CC) $(CFLAGS) $< -c -o $@
 
 build/$(BUILD_TYPE)/tests/%.o: tests/%.c
-	$(CC) $(CFLAGS) -Isrc -lpthread $< -c -o $@ -DBINARY_PATH=\"$(BIN)\"
+	$(CC) $(CFLAGS) -Isrc $< -c -o $@ -DBINARY_PATH=\"$(BIN)\"
 
 clean:
 	rm -f $(OBJ) $(BIN) $(TEST_OBJ) $(TEST_BIN)
