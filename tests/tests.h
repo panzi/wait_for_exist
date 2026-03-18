@@ -8,7 +8,9 @@
 extern "C" {
 #endif
 
+DECL_TEST(normpath_empty);
 DECL_TEST(normpath_simple);
+DECL_TEST(normpath_absolute);
 DECL_TEST(normpath_double_slash);
 DECL_TEST(normpath_trailing_slash);
 DECL_TEST(normpath_dot);

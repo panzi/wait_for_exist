@@ -93,15 +93,12 @@ char *normpath(const char *path) {
         }
 
         if (name_end_ptr == src && *name_end_ptr == 0) {
-            if (dest == buf) {
-                *(dest ++) = '/';
-            }
             break;
         }
 
         *(dest ++) = '/';
 
-        size_t namelen = (size_t)(name_end_ptr - src);
+        const size_t namelen = (size_t)(name_end_ptr - src);
 
         if (namelen == 1 && *src == '.') {
             // remove any '.'
@@ -113,11 +110,7 @@ char *normpath(const char *path) {
                 char *new_dest = memrchr(buf, '/', (size_t)(dest - buf) - 1);
                 assert(new_dest != NULL);
 
-                if (new_dest == NULL || new_dest == buf) {
-                    dest = buf + 1;
-                } else {
-                    dest = new_dest;
-                }
+                dest = new_dest == NULL ? buf : new_dest;
             } else if (dest > buf) {
                 -- dest;
             }
@@ -129,8 +122,7 @@ char *normpath(const char *path) {
     }
 
     if (dest == buf) {
-        *dest = '/';
-        ++ dest;
+        *(dest ++) = '/';
     } else {
         // strip trailing '/'
         while (dest > buf && *(dest - 1) == '/') {

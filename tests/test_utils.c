@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "normpath.h"
 #include "test.h"
 #include "test_utils.h"
 
@@ -43,23 +44,32 @@ ProcInfo spawn_wait_for_exist(const char *suffix) {
     test_assertf(res > 0 && res < sizeof(buf), "create file name");
     char *filename = strdup(buf);
     test_assert(filename != NULL);
-
-    char *binary_path = canonicalize_file_name(BINARY_PATH);
-    test_assertf(binary_path != NULL, "error canonicalizing path %s: %s", BINARY_PATH, strerror(errno));
-
-    const char*const args[] = {
-        BINARY_PATH,
-        filename,
-        NULL,
-    };
+    test_cleanup(free, filename);
 
     struct timespec started_at = { .tv_sec = 0, .tv_nsec = 0 };
     clock_gettime(CLOCK_MONOTONIC, &started_at);
 
-    res = posix_spawn(&pid, binary_path, NULL, NULL, (char *const*)args, NULL);
+    if (use_valgrind) {
+        const char*const args[] = {
+            "valgrind",
+            "--leak-check=yes",
+            "--show-leak-kinds=all",
+            "-s",
+            binary_path,
+            filename,
+            NULL,
+        };
 
-    free(binary_path);
-    binary_path = NULL;
+        res = posix_spawn(&pid, valgrind_path, NULL, NULL, (char *const*)args, NULL);
+    } else {
+        const char*const args[] = {
+            BINARY_PATH,
+            filename,
+            NULL,
+        };
+
+        res = posix_spawn(&pid, binary_path, NULL, NULL, (char *const*)args, NULL);
+    }
 
     test_assertf(
         res == 0,

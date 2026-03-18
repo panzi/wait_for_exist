@@ -57,7 +57,20 @@ void print_pass_fail(const TestResult *result, bool use_color) {
 
 void print_fail_details(const Test *test, const TestResult *result) {
     print_str("================================================================================\n");
-    printf("%s: %s\n", test->filename, test->func_name);
+    printf("%s: ", test->filename);
+    const char *ptr = test->func_name;
+    while (*ptr) {
+        const char *nextptr = strchr(ptr, '_');
+        if (nextptr == NULL) {
+            print_str(ptr);
+            break;
+        }
+
+        fwrite(ptr, nextptr - ptr, 1, stdout);
+        putchar(' ');
+        ptr = nextptr + 1;
+    }
+    putchar('\n');
     print_str("================================================================================\n");
     putchar('\n');
     printf(
@@ -78,7 +91,7 @@ void print_fail_details(const Test *test, const TestResult *result) {
 
     if (result->test_stdout.used > 0) {
         print_str("--------------------------------------------------------------------------------\n");
-        print_str("stdout\n");
+        print_str("    stdout\n");
         print_str("--------------------------------------------------------------------------------\n");
         putchar('\n');
         print_str(result->test_stdout.data);
@@ -87,7 +100,7 @@ void print_fail_details(const Test *test, const TestResult *result) {
 
     if (result->test_stderr.used > 0) {
         print_str("--------------------------------------------------------------------------------\n");
-        print_str("stderr\n");
+        print_str("    stderr\n");
         print_str("--------------------------------------------------------------------------------\n");
         putchar('\n');
         print_str(result->test_stderr.data);
@@ -223,8 +236,31 @@ TestState _test_state = {
     .current_result = NULL,
     .original_stdout = STDOUT_FILENO,
     .original_stderr = STDERR_FILENO,
+    .cleanup = NULL,
+    .cleanup_capacity = 0,
+    .cleanup_used     = 0,
 };
 
+void test_cleanup(void (*cleanup_func)(void *data), void *data) {
+    if (_test_state.cleanup_used >= _test_state.cleanup_capacity) {
+        size_t new_capacity = _test_state.cleanup_capacity == 0 ? 32 : _test_state.cleanup_capacity * 2;
+        if (new_capacity <= _test_state.cleanup_capacity || new_capacity >= SIZE_MAX / sizeof(TestCleanup)) {
+            test_fail("failed to allocate test cleanup array");
+        }
+        TestCleanup *new_cleanup = realloc(_test_state.cleanup, new_capacity * sizeof(TestCleanup));
+        if (new_cleanup == NULL) {
+            test_fail("failed to allocate test cleanup array");
+        }
+
+        _test_state.cleanup = new_cleanup;
+        _test_state.cleanup_capacity = new_capacity;
+    }
+
+    _test_state.cleanup[_test_state.cleanup_used ++] = (TestCleanup) {
+        .cleanup_func = cleanup_func,
+        .data = data,
+    };
+}
 
 int test_main(int argc, char *argv[], Test *tests) {
     bool fail = false;
@@ -382,6 +418,12 @@ int test_main(int argc, char *argv[], Test *tests) {
                 goto cleanup;
             }
 
+            for (size_t index = 0; index < _test_state.cleanup_used; ++ index) {
+                const TestCleanup *cleanup = &_test_state.cleanup[index];
+                cleanup->cleanup_func(cleanup->data);
+            }
+            _test_state.cleanup_used = 0;
+
             if (result->ok && result->assert_count == 0) {
                 result->ok = false;
                 result->assert_filename = test->filename;
@@ -440,6 +482,13 @@ cleanup:
     }
 
     free(_test_state.results);
+    _test_state.results = NULL;
+
+    free(_test_state.cleanup);
+
+    _test_state.cleanup = NULL;
+    _test_state.cleanup_capacity = 0;
+    _test_state.cleanup_used = 0;
 
     return fail ? 1 : 0;
 }

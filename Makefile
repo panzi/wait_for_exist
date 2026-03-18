@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -std=c11 -Werror
+CFLAGS = -Wall -std=c2x -Werror
 BUILD_TYPE = debug
 
 ifeq ($(BUILD_TYPE),debug)
@@ -23,12 +23,15 @@ TEST_OBJ = build/$(BUILD_TYPE)/tests/main.o \
            build/$(BUILD_TYPE)/normpath.o
 TEST_BIN = build/$(BUILD_TYPE)/tests/test
 
-.PHONY: all clean test
+.PHONY: all clean test valgrind
 
 all: $(BIN)
 
 test: $(BIN) $(TEST_BIN)
 	$(TEST_BIN)
+
+valgrind: $(BIN) $(TEST_BIN)
+	USE_VALGRIND=1 valgrind --leak-check=yes --show-leak-kinds=all -s $(TEST_BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) -o $@
@@ -43,4 +46,4 @@ build/$(BUILD_TYPE)/tests/%.o: tests/%.c
 	$(CC) $(CFLAGS) -Isrc -lpthread $< -c -o $@ -DBINARY_PATH=\"$(BIN)\"
 
 clean:
-	rm $(OBJ) $(BIN)
+	rm -f $(OBJ) $(BIN) $(TEST_OBJ) $(TEST_BIN)

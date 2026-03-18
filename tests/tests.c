@@ -5,23 +5,71 @@
 
 #include "normpath.h"
 
-// TODO: free() on fail
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+
 #define assert_normpath(path, expected) \
 { \
     const char *_test_path = (path); \
     const char *_test_expected = (expected); \
     char *_test_path_res = normpath(_test_path); \
     test_assertf(_test_path_res != NULL, "normpath(\"%s\") failed: %s", _test_path, strerror(errno)); \
-    test_assertf(strcmp(_test_path_res, _test_expected) == 0, "expected: \"%s\", actual: \"%s\"", _test_expected, _test_path_res); \
-    free(_test_path_res); \
+    test_cleanup(free, _test_path_res); \
+    test_assertf(strcmp(_test_path_res, _test_expected) == 0, "    expected: \"%s\"\n      actual: \"%s\"", _test_expected, _test_path_res); \
 }
 
-TODO_TEST(normpath_simple) {}
-TODO_TEST(normpath_double_slash) {}
-TODO_TEST(normpath_trailing_slash) {}
-TODO_TEST(normpath_dot) {}
-TODO_TEST(normpath_double_dot) {}
-TODO_TEST(normpath_everything) {}
+#define chdir_tmp() test_assertf(chdir("/tmp") == 0, "chdir(\"/tmp\"): %s", strerror(errno))
+
+TEST(normpath_empty) {
+    chdir_tmp();
+    assert_normpath("", "/tmp");
+}
+
+TEST(normpath_simple) {
+    chdir_tmp();
+    assert_normpath("foo", "/tmp/foo");
+}
+
+TEST(normpath_absolute) {
+    chdir_tmp();
+    assert_normpath("/", "/");
+    assert_normpath("/foo/bar", "/foo/bar");
+}
+
+TEST(normpath_double_slash) {
+    chdir_tmp();
+    assert_normpath("foo//bar", "/tmp/foo/bar");
+}
+
+TEST(normpath_trailing_slash) {
+    chdir_tmp();
+    assert_normpath("foo/", "/tmp/foo");
+    assert_normpath("foo///", "/tmp/foo");
+}
+
+TEST(normpath_dot) {
+    chdir_tmp();
+    assert_normpath(".", "/tmp");
+    assert_normpath("./foo", "/tmp/foo");
+    assert_normpath("foo/.", "/tmp/foo");
+    assert_normpath("foo/./bar", "/tmp/foo/bar");
+}
+
+TEST(normpath_double_dot) {
+    chdir_tmp();
+    assert_normpath("..", "/");
+    assert_normpath("../foo", "/foo");
+    assert_normpath("foo/..", "/tmp");
+    assert_normpath("foo/bar/../", "/tmp/foo");
+    assert_normpath("foo/../bar/../../..", "/");
+}
+
+TEST(normpath_everything) {
+    chdir_tmp();
+    assert_normpath("././foo/../bar//baz///", "/tmp/bar/baz");
+    assert_normpath("/./../foo/../bar//baz///", "/bar/baz");
+}
 
 TEST(path_existing) {
     make_dir(NULL);

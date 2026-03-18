@@ -35,27 +35,38 @@ extern "C" {
 #define DECL_TEST(NAME) extern Test _test_cat(test_case_, NAME);
 #define GET_TEST(NAME) _test_cat(test_case_, NAME)
 
-#define test_assertf(EXPR, FMT, ...)                                        \
-    {                                                                       \
-        ++ _test_state.current_result->assert_count;                        \
-                                                                            \
-        if (!(EXPR)) {                                                      \
-            _test_state.current_result->ok = false;                         \
-            _test_state.current_result->assert_filename = __FILE__;         \
-            _test_state.current_result->assert_func_name = __FUNCTION__;    \
-            _test_state.current_result->assert_lineno = __LINE__;           \
-            _test_state.current_result->assert_expr = _test_str(EXPR);      \
-            _test_state.current_result->assert_message = NULL;              \
-                                                                            \
-            const char *_test_fmt = FMT;                                    \
-            if (_test_fmt != NULL && strlen(_test_fmt) > 0) {               \
-                if (asprintf(&_test_state.current_result->assert_message,   \
-                    FMT __VA_OPT__(,) __VA_ARGS__) < 0) {                   \
-                    _test_state.current_result->assert_message = strdup(strerror(errno)); \
-                }                                                           \
-            }                                                               \
-            longjmp(_test_state.env, -1);                                   \
-        }                                                                   \
+#define _test_fail(EXPR, FMT, ...)                                      \
+    {                                                                   \
+        _test_state.current_result->ok = false;                         \
+        _test_state.current_result->assert_filename = __FILE__;         \
+        _test_state.current_result->assert_func_name = __FUNCTION__;    \
+        _test_state.current_result->assert_lineno = __LINE__;           \
+        _test_state.current_result->assert_expr = EXPR;                 \
+        _test_state.current_result->assert_message = NULL;              \
+                                                                        \
+        const char *_test_fmt = FMT;                                    \
+        if (_test_fmt != NULL && strlen(_test_fmt) > 0) {               \
+            if (asprintf(&_test_state.current_result->assert_message,   \
+                FMT __VA_OPT__(,) __VA_ARGS__) < 0) {                   \
+                _test_state.current_result->assert_message = strdup(strerror(errno)); \
+            }                                                           \
+        }                                                               \
+        longjmp(_test_state.env, -1);                                   \
+    }
+
+#define test_fail(FMT, ...)                                             \
+    {                                                                   \
+        ++ _test_state.current_result->assert_count;                    \
+        _test_fail(NULL, FMT __VA_OPT__(,), __VA_ARGS__);               \
+    }
+
+#define test_assertf(EXPR, FMT, ...)                                    \
+    {                                                                   \
+        ++ _test_state.current_result->assert_count;                    \
+                                                                        \
+        if (!(EXPR)) {                                                  \
+            _test_fail(_test_str(EXPR), FMT __VA_OPT__(,) __VA_ARGS__); \
+        }                                                               \
     }
 
 #define test_assert(EXPR) test_assertf(EXPR, NULL)
@@ -67,6 +78,11 @@ typedef struct Test {
     bool skip;
     void (*test_func)();
 } Test;
+
+typedef struct TestCleanup {
+    void (*cleanup_func)(void *data);
+    void *data;
+} TestCleanup;
 
 typedef struct TestResult {
     bool ok;
@@ -91,7 +107,14 @@ typedef struct TestState {
 
     int original_stdout;
     int original_stderr;
+
+    TestCleanup *cleanup;
+    size_t cleanup_capacity;
+    size_t cleanup_used;
 } TestState;
+
+/** Not thread safe! Add lock? */
+void test_cleanup(void (*cleanup_func)(void *data), void *data);
 
 int test_main(int argc, char *argv[], Test *tests);
 

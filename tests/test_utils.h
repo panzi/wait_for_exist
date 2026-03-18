@@ -6,6 +6,7 @@
 #include <time.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <spawn.h>
 #include <sys/wait.h>
 
@@ -27,6 +28,10 @@ typedef struct ProcInfo {
 #ifndef BINARY_PATH
 #define BINARY_PATH "./build/debug/wait_for_exist"
 #endif
+
+extern char *binary_path;
+extern char *valgrind_path;
+extern bool use_valgrind;
 
 ProcInfo spawn_wait_for_exist(const char *suffix);
 
@@ -57,8 +62,6 @@ ProcInfo spawn_wait_for_exist(const char *suffix);
     } else { \
         test_assertf(_test_status == 0, "process %s %s status: %d", BINARY_PATH, (PROC)->filename, _test_status); \
     } \
-    free((PROC)->filename); \
-    (PROC)->filename = NULL; \
     sleep(0); /* HACK: clear alarm */ \
 }
 
