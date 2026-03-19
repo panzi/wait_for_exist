@@ -53,10 +53,30 @@ void print_str(const char *str) {
     fwrite(str, strlen(str), 1, stdout);
 }
 
+void print_test_name(const char *func_name) {
+    const char *ptr = func_name;
+    while (*ptr) {
+        const char *nextptr = strchr(ptr, '_');
+        if (nextptr == NULL) {
+            print_str(ptr);
+            break;
+        }
+
+        fwrite(ptr, nextptr - ptr, 1, stdout);
+        putchar(' ');
+        ptr = nextptr + 1;
+    }
+}
+
 void print_test_header(const Test *test, size_t width) {
     int count = 0;
-    printf("%s:%" PRIuPTR ":%s ...%n", test->filename, test->lineno, test->func_name, &count);
-    ++ count;
+
+    printf("%s:%" PRIuPTR ":%n", test->filename, test->lineno, &count);
+    print_test_name(test->func_name);
+    print_str(" ...");
+
+    count += 5 + strlen(test->func_name);
+
     while (count < width) {
         putchar('.');
         count ++;
@@ -86,18 +106,7 @@ void print_pass_fail(const TestResult *result, bool use_color) {
 void print_fail_details(const Test *test, const TestResult *result) {
     print_str("================================================================================\n");
     printf("%s: ", test->filename);
-    const char *ptr = test->func_name;
-    while (*ptr) {
-        const char *nextptr = strchr(ptr, '_');
-        if (nextptr == NULL) {
-            print_str(ptr);
-            break;
-        }
-
-        fwrite(ptr, nextptr - ptr, 1, stdout);
-        putchar(' ');
-        ptr = nextptr + 1;
-    }
+    print_test_name(test->func_name);
     putchar('\n');
     print_str("================================================================================\n");
     putchar('\n');
