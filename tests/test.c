@@ -417,6 +417,8 @@ int test_main(int argc, char *argv[], Test *tests) {
         }
     }
 
+    puts("Running tests!");
+
     for (size_t index = 0; index < test_count; ++ index) {
         if (_test_state.signals & TEST_SIGINT) {
             puts("Stopping on SIGINT!");

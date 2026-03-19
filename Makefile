@@ -2,6 +2,7 @@ CC = gcc
 CFLAGS = -Wall -std=c2x -Werror
 BUILD_TYPE = debug
 TEST_FLAGS =
+PREFIX = /usr/local
 
 ifeq ($(BUILD_TYPE),debug)
 CFLAGS += -g
@@ -26,7 +27,7 @@ TEST_OBJ = build/$(BUILD_TYPE)/tests/main.o \
            build/$(BUILD_TYPE)/normpath.o
 TEST_BIN = build/$(BUILD_TYPE)/tests/test
 
-.PHONY: all clean test valgrind build-test
+.PHONY: all clean test valgrind build-test install uninstall
 
 all: $(BIN)
 
@@ -37,6 +38,12 @@ valgrind: $(BIN) $(TEST_BIN)
 	USE_VALGRIND=1 valgrind --leak-check=yes --show-leak-kinds=all -s $(TEST_BIN) $(TEST_FLAGS)
 
 build-test: $(BIN) $(TEST_BIN)
+
+install: $(BIN)
+	cp $(BIN) $(PREFIX)/bin/wait_for_exist
+
+uninstall:
+	rm -f $(PREFIX)/bin/wait_for_exist
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) -o $@

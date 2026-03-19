@@ -28,11 +28,26 @@
 static void print_usage(int argc, char *const argv[]) {
     const char *progname = argc > 0 ? argv[0] : "wait_for_exist";
 
-    printf("%s: [--help] [--version] [--timeout=SECONDS] <path>\n", progname);
+    printf("Usage: %s: [--help] [--version] [--timeout=SECONDS] <path>\n", progname);
 }
 
 static void print_help(int argc, char *const argv[]) {
+    printf(
+        "Wait for a path to appear using inotify.\n"
+        "\n"
+    );
+
     print_usage(argc, argv);
+
+    printf(
+        "\n"
+        "OPTIONS:\n"
+        "\n"
+        "    -h, --help               Print this help message.\n"
+        "    -v, --version            Print version.\n"
+        "    -t, --timeout=SECONDS    Timeout after SECONDS without a new inotify event.\n"
+        "\n"
+    );
 }
 
 static const char *skipws(const char *source) {
