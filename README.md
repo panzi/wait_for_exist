@@ -2,7 +2,7 @@ wait for exists
 ===============
 
 [![Test Status](https://img.shields.io/github/actions/workflow/status/panzi/wait_for_exist/tests.yml)](https://github.com/panzi/wait_for_exist/actions/workflows/tests.yml)
-[![Release](https://img.shields.io/github/v/tag/panzi/wait_for_exist)](https://github.com/panzi/wait_for_exist/releases)
+[![Release](https://img.shields.io/github/v/tag/panzi/wait_for_exist)](https://github.com/panzi/wait_for_exist/tags)
 [![GNU General Public License 3.0](https://img.shields.io/github/license/panzi/wait_for_exist)](https://github.com/panzi/wait_for_exist/blob/main/LICENSE.txt)
 
 Simple C program to wait for a path to appear using inotify.
