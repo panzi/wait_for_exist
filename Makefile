@@ -7,6 +7,8 @@ CFLAGS += -g
 else
 ifeq ($(BUILD_TYPE),release)
 CFLAGS += -O2 -DNDEBUG
+else
+$(error illegal BUILD_TYPE=$(BUILD_TYPE))
 endif
 endif
 
