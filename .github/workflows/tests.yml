@@ -16,7 +16,7 @@ jobs:
 
     - name: Install Valgrind
       run: |
-        apt-get install valgrind
+        sudo apt install valgrind
 
     - name: Build
       run: |
