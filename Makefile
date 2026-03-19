@@ -1,6 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -std=c2x -Werror
 BUILD_TYPE = debug
+TEST_FLAGS =
 
 ifeq ($(BUILD_TYPE),debug)
 CFLAGS += -g
@@ -25,15 +26,17 @@ TEST_OBJ = build/$(BUILD_TYPE)/tests/main.o \
            build/$(BUILD_TYPE)/normpath.o
 TEST_BIN = build/$(BUILD_TYPE)/tests/test
 
-.PHONY: all clean test valgrind
+.PHONY: all clean test valgrind build-test
 
 all: $(BIN)
 
 test: $(BIN) $(TEST_BIN)
-	$(TEST_BIN)
+	$(TEST_BIN) $(TEST_FLAGS)
 
 valgrind: $(BIN) $(TEST_BIN)
-	USE_VALGRIND=1 valgrind --leak-check=yes --show-leak-kinds=all -s $(TEST_BIN)
+	USE_VALGRIND=1 valgrind --leak-check=yes --show-leak-kinds=all -s $(TEST_BIN) $(TEST_FLAGS)
+
+build-test: $(BIN) $(TEST_BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) -o $@
