@@ -15,37 +15,82 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
-void make_dir(const char *suffix) {
+void _make_dir(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     char filename[4096];
     int res = suffix == NULL ?
         snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d", getpid()) :
         snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create directory name: %s", strerror(errno));
-    test_assertf(mkdir(filename, 0750) == 0 || errno == EEXIST, "error creating directory %s: %s", filename, strerror(errno));
+
+    if (res <= 0 || res >= sizeof(filename)) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "create directory name: %s", strerror(errno)
+        );
+    }
+
+    if (mkdir(filename, 0750) != 0 && errno != EEXIST) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "error creating directory %s: %s", filename, strerror(errno)
+        );
+    }
 }
 
-void make_file(const char *suffix) {
+void _make_file(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     char filename[4096];
     int res = snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create file name: %s", strerror(errno));
+
+    if (res <= 0 || res >= sizeof(filename)) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "create file name: %s", strerror(errno)
+        );
+    }
+
     int fd = open(filename, O_CREAT | O_WRONLY | O_CLOEXEC, 0640);
     int errnum = errno;
     close(fd);
-    test_assertf(fd >= 0, "error creating file %s: %s", filename, strerror(errnum));
+
+    if (fd < 0) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "error creating file %s: %s", filename, strerror(errnum)
+        );
+    }
 }
 
-void rm(const char *suffix) {
+void _rm(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     char filename[4096];
     int res = snprintf(filename, sizeof(filename), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
-    test_assertf(res > 0 && res < sizeof(filename), "create file name");
-    test_assertf(remove(filename) == 0, "error deleting %s: %s", filename, strerror(errno));
+
+    if (res <= 0 || res >= sizeof(filename)) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "create file name: %s", strerror(errno)
+        );
+    }
+
+    if (remove(filename) != 0) {
+        _test_fail(
+            expr, src_filename, func_name, lineno,
+            "error deleting %s: %s", filename, strerror(errno)
+        );
+    }
 }
 
-void _proc_destroy(void *ptr) {
+static void _proc_destroy(void *ptr) {
     proc_destroy((ProcInfo*)ptr);
 }
 
 ProcInfo *_spawn_wait_for_exist(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     char buf[4096];
 
     int res = snprintf(buf, sizeof(buf), "/tmp/test.wait_for_exist.%d/%s", getpid(), suffix);
@@ -168,6 +213,8 @@ struct timespec timespec_sub(const struct timespec *lhs, const struct timespec *
 #define TEST_TIMEOUT 3
 
 void _assert_proc_ok(const ProcInfo *proc, const char *expr, const char *filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     if (proc->pid <= 0) {
         _test_fail(
             expr, filename, func_name, lineno,
@@ -226,6 +273,8 @@ void _assert_proc_ok(const ProcInfo *proc, const char *expr, const char *filenam
 }
 
 void _assert_proc_running(const ProcInfo *proc, const char *expr, const char *filename, const char *func_name, size_t lineno) {
+    ++ _test_state.current_result->assert_count;
+
     int status = 0;
     if (waitpid(proc->pid, &status, WNOHANG) != 0) {
         _test_fail(

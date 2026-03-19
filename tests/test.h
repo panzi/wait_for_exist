@@ -54,7 +54,6 @@ void _test_fail(
 #define test_assertf(EXPR, FMT, ...)                                    \
     {                                                                   \
         ++ _test_state.current_result->assert_count;                    \
-                                                                        \
         if (!(EXPR)) {                                                  \
             _test_fail(                                                 \
                 NULL, __FILE__, __FUNCTION__, __LINE__,                 \

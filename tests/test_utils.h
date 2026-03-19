@@ -8,9 +8,19 @@
 extern "C" {
 #endif
 
-void make_dir(const char *suffix);
-void make_file(const char *suffix);
-void rm(const char *suffix);
+void _make_dir(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno);
+void _make_file(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno);
+void _rm(const char *suffix, const char *expr, const char *src_filename, const char *func_name, size_t lineno);
+
+#define make_dir(suffix) \
+    _make_dir((suffix), "make_dir(" _test_str(suffix) ")", __FILE__, __FUNCTION__, __LINE__)
+
+#define make_file(suffix) \
+    _make_file((suffix), "make_file(" _test_str(suffix) ")", __FILE__, __FUNCTION__, __LINE__)
+
+#define rm(suffix) \
+    _rm((suffix), "rm(" _test_str(suffix) ")", __FILE__, __FUNCTION__, __LINE__)
+
 struct timespec timespec_sub(const struct timespec *lhs, const struct timespec *rhs);
 
 typedef struct ProcInfo {

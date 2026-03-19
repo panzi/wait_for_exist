@@ -18,6 +18,8 @@ void _assert_normpath(
         const char *func_name,
         size_t lineno
 ) {
+    ++ _test_state.current_result->assert_count;
+
     char *actual = normpath(path);
     if (actual == NULL) {
         _test_fail(
