@@ -9,9 +9,9 @@
 #include <getopt.h>
 #include <string.h>
 #include <inttypes.h>
-#include <time.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdarg.h>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -27,6 +27,27 @@
 #define YELLOW "\x1B[33m"
 #define HIDE_CURSOR "\x1B[?15l"
 #define SHOW_CURSOR "\x1B[?15h"
+
+void _test_fail(const char *expr, const char *filename, const char *func_name, size_t lineno, const char *fmt, ...) {
+    _test_state.current_result->ok = false;
+    _test_state.current_result->assert_filename = filename;
+    _test_state.current_result->assert_func_name = func_name;
+    _test_state.current_result->assert_lineno = lineno;
+    _test_state.current_result->assert_expr = expr;
+    _test_state.current_result->assert_message = NULL;
+
+    if (fmt != NULL && strlen(fmt) > 0) {
+        va_list ap;
+        va_start(ap, fmt);
+
+        if (vasprintf(&_test_state.current_result->assert_message, fmt, ap) < 0) {
+            _test_state.current_result->assert_message = strdup(strerror(errno));
+        }
+
+        va_end(ap);
+    }
+    longjmp(_test_state.env, -1);
+}
 
 void print_str(const char *str) {
     fwrite(str, strlen(str), 1, stdout);

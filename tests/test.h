@@ -20,7 +20,7 @@ extern "C" {
 #define _test_cat(A, B) _test_cat2(A, B)
 
 #define _TEST(NAME, SKIP)                                    \
-    static void _test_cat(test_func_, NAME)();               \
+    void _test_cat(test_func_, NAME)();                      \
     Test _test_cat(test_case_, NAME) = {                     \
         .func_name = _test_str(NAME),                        \
         .filename = __FILE__,                                \
@@ -35,29 +35,20 @@ extern "C" {
 #define DECL_TEST(NAME) extern Test _test_cat(test_case_, NAME);
 #define GET_TEST(NAME) _test_cat(test_case_, NAME)
 
-#define _test_fail(EXPR, FMT, ...)                                      \
-    {                                                                   \
-        _test_state.current_result->ok = false;                         \
-        _test_state.current_result->assert_filename = __FILE__;         \
-        _test_state.current_result->assert_func_name = __FUNCTION__;    \
-        _test_state.current_result->assert_lineno = __LINE__;           \
-        _test_state.current_result->assert_expr = EXPR;                 \
-        _test_state.current_result->assert_message = NULL;              \
-                                                                        \
-        const char *_test_fmt = FMT;                                    \
-        if (_test_fmt != NULL && strlen(_test_fmt) > 0) {               \
-            if (asprintf(&_test_state.current_result->assert_message,   \
-                FMT __VA_OPT__(,) __VA_ARGS__) < 0) {                   \
-                _test_state.current_result->assert_message = strdup(strerror(errno)); \
-            }                                                           \
-        }                                                               \
-        longjmp(_test_state.env, -1);                                   \
-    }
+void _test_fail(
+    const char *expr, const char *filename,
+    const char *func_name, size_t lineno,
+    const char *fmt, ...
+) __attribute__ ((__noreturn__))
+  __attribute__ ((format(printf, 5, 6)));
 
 #define test_fail(FMT, ...)                                             \
     {                                                                   \
         ++ _test_state.current_result->assert_count;                    \
-        _test_fail(NULL, FMT __VA_OPT__(,) __VA_ARGS__);                \
+        _test_fail(                                                     \
+            NULL, __FILE__, __FUNCTION__, __LINE__,                     \
+            FMT __VA_OPT__(,) __VA_ARGS__                               \
+        );                                                              \
     }
 
 #define test_assertf(EXPR, FMT, ...)                                    \
@@ -65,7 +56,10 @@ extern "C" {
         ++ _test_state.current_result->assert_count;                    \
                                                                         \
         if (!(EXPR)) {                                                  \
-            _test_fail(_test_str(EXPR), FMT __VA_OPT__(,) __VA_ARGS__); \
+            _test_fail(                                                 \
+                NULL, __FILE__, __FUNCTION__, __LINE__,                 \
+                FMT __VA_OPT__(,) __VA_ARGS__                           \
+            );                                                          \
         }                                                               \
     }
 

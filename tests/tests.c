@@ -8,16 +8,42 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
+
+void _assert_normpath(
+        const char *path,
+        const char *expected,
+        const char *expr,
+        const char *filename,
+        const char *func_name,
+        size_t lineno
+) {
+    char *actual = normpath(path);
+    if (actual == NULL) {
+        _test_fail(
+            expr, filename, func_name, lineno,
+            "normpath(\"%s\")", path
+        );
+    }
+    test_cleanup(free, actual);
+    if (strcmp(actual, expected) != 0) {
+        _test_fail(
+            expr, filename, func_name, lineno,
+            "    expected: \"%s\"\n      actual: \"%s\"",
+            expected, actual
+        );
+    }
+}
 
 #define assert_normpath(path, expected) \
-{ \
-    const char *_test_path = (path); \
-    const char *_test_expected = (expected); \
-    char *_test_path_res = normpath(_test_path); \
-    test_assertf(_test_path_res != NULL, "normpath(\"%s\") failed: %s", _test_path, strerror(errno)); \
-    test_cleanup(free, _test_path_res); \
-    test_assertf(strcmp(_test_path_res, _test_expected) == 0, "    expected: \"%s\"\n      actual: \"%s\"", _test_expected, _test_path_res); \
-}
+    _assert_normpath(                   \
+        (path),                         \
+        (expected),                     \
+        "assert_normpath(" _test_str(path) ", " _test_str(expected) ")", \
+        __FILE__,                       \
+        __FUNCTION__,                   \
+        __LINE__                        \
+    )
 
 #define chdir_tmp() test_assertf(chdir("/tmp") == 0, "chdir(\"/tmp\"): %s", strerror(errno))
 

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "test.h"
 #include "tests.h"

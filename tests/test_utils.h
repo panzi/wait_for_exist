@@ -2,13 +2,7 @@
 #define TEST_UTILS_H
 #pragma once
 
-#define _GNU_SOURCE
 #include <time.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <spawn.h>
-#include <sys/wait.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,44 +27,22 @@ extern char *binary_path;
 extern char *valgrind_path;
 extern bool use_valgrind;
 
-ProcInfo *spawn_wait_for_exist(const char *suffix);
+ProcInfo *_spawn_wait_for_exist(const char *suffix, const char *expr, const char *filename, const char *func_name, size_t lineno);
+
+#define spawn_wait_for_exist(suffix) \
+    _spawn_wait_for_exist((suffix), "spawn_wait_for_exist(" _test_str(suffix) ")", __FILE__, __FUNCTION__, __LINE__)
+
 void proc_destroy(ProcInfo *proc);
 
-#define TEST_TIMEOUT 3
+void _assert_proc_ok(const ProcInfo *proc, const char *expr, const char *filename, const char *func_name, size_t lineno);
 
-#define assert_proc_ok(PROC) { \
-    test_assertf((PROC)->pid > 0, "illegal pid for %s %s: %d", BINARY_PATH, (PROC)->filename, (PROC)->pid); \
-    struct timespec _test_waited_at = { .tv_sec = 0, .tv_nsec = 0 }; \
-    struct timespec _test_ended_at = { .tv_sec = 0, .tv_nsec = 0 }; \
-    int _test_status = 0; \
-    pid_t _test_wait_res = -1; \
-    \
-    clock_gettime(CLOCK_MONOTONIC, &_test_waited_at); \
-    while ((_test_wait_res = waitpid((PROC)->pid, &_test_status, WNOHANG)) == 0) { \
-        usleep(250000); \
-        clock_gettime(CLOCK_MONOTONIC, &_test_ended_at); \
-        if (timespec_sub(&_test_ended_at, &_test_waited_at).tv_sec >= TEST_TIMEOUT) { \
-            test_fail("timeout running %s %s", BINARY_PATH, (PROC)->filename); \
-        } \
-    } \
-    \
-    test_assertf(_test_wait_res == (PROC)->pid, "error wating for %s %s: %s", BINARY_PATH, (PROC)->filename, strerror(errno)); \
-    if (WIFSIGNALED(_test_status)) { \
-        test_fail("process %s %s terminated by signal %d", BINARY_PATH, (PROC)->filename, WTERMSIG(_test_status)); \
-    } else if (WIFSTOPPED(_test_status)) { \
-        test_fail("process %s %s stopped by signal %d", BINARY_PATH, (PROC)->filename, WSTOPSIG(_test_status)); \
-    } else if (WIFEXITED(_test_status)) { \
-        int _test_exit_status = WEXITSTATUS(_test_status); \
-        test_assertf(_test_exit_status == 0, "process %s %s exit status: %d", BINARY_PATH, (PROC)->filename, _test_exit_status); \
-    } else { \
-        test_assertf(_test_status == 0, "process %s %s status: %d", BINARY_PATH, (PROC)->filename, _test_status); \
-    } \
-}
+#define assert_proc_ok(PROC) \
+    _assert_proc_ok((PROC), "assert_proc_ok(" _test_str(PROC) ")", __FILE__, __FUNCTION__, __LINE__)
 
-#define assert_proc_running(PROC) { \
-    int _test_proc_status = 0; \
-    test_assertf(waitpid((PROC)->pid, &_test_proc_status, WNOHANG) == 0, "process isn't running %s %s", BINARY_PATH, (PROC)->filename); \
-}
+void _assert_proc_running(const ProcInfo *proc, const char *expr, const char *filename, const char *func_name, size_t lineno);
+
+#define assert_proc_running(PROC) \
+    _assert_proc_running((PROC), "assert_proc_running(" _test_str(PROC) ")", __FILE__, __FUNCTION__, __LINE__)
 
 #ifdef __cplusplus
 }
